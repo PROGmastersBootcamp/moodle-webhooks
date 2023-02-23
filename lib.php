@@ -242,6 +242,13 @@ function local_webhooks_restore_backup($data, $deleterecords = false) {
     local_webhooks_events::backup_restored();
 }
 
+require '/home/ubuntu/aws_php_lib/aws-autoloader.php';
+
+use Aws\Sqs\SqsClient;
+use Aws\Exception\AwsException;
+
+
+
 /**
  * Send the event remotely to the service.
  *
@@ -256,13 +263,32 @@ function local_webhooks_send_request($event, $callback) {
     $event["token"] = $callback->token;
     $event["extra"] = $callback->other;
 
-    $curl = new curl();
-    $curl->setHeader(array("Content-Type: application/" . $callback->type));
-    $curl->post($callback->url, json_encode($event));
-    $response = $curl->getResponse();
+    $body = json_encode(array(
+        'type' => 'MOODLE_WEBHOOK',
+        'content' => json_encode($event)
+    ));
 
-    /* Event notification */
-    local_webhooks_events::response_answer($callback->id, $response);
+    $client = new SqsClient([
+        'profile' => 'default',
+        'region' => 'eu-west-1',
+        'version' => '2012-11-05'
+    ]);
+    $params = [
+        'MessageBody' => $body,
+        'QueueUrl' => $callback->url
+    ];
 
-    return $response;
+    try {
+        $result = $client->sendMessage($params);
+        /* Event notification */
+        local_webhooks_events::response_answer($callback->id, $result);
+        return [$result];
+    } catch (AwsException $e) {
+        local_webhooks_events::response_answer($callback->id, $e->getMessage());
+        return [$e];
+    } catch (Exception $e) {
+        local_webhooks_events::response_answer($callback->id, $e->getMessage());
+        return [$e];
+    }
+
 }
