@@ -242,7 +242,7 @@ function local_webhooks_restore_backup($data, $deleterecords = false) {
     local_webhooks_events::backup_restored();
 }
 
-require '/home/ubuntu/aws_php_lib/aws-autoloader.php';
+require '/var/www/html/aws_php_lib/aws-autoloader.php';
 
 use Aws\Sqs\SqsClient;
 use Aws\Exception\AwsException;
