@@ -244,6 +244,7 @@ function local_webhooks_restore_backup($data, $deleterecords = false) {
 
 require '/var/www/html/aws_php_lib/aws-autoloader.php';
 
+use Aws\Credentials\CredentialProvider;
 use Aws\Sqs\SqsClient;
 use Aws\Exception\AwsException;
 
@@ -263,16 +264,23 @@ function local_webhooks_send_request($event, $callback) {
     $event["token"] = $callback->token;
     $event["extra"] = $callback->other;
 
+    $profile = 'default';
+    $path = '/var/www/html/.aws/credentials';
+
+    $provider = CredentialProvider::ini($profile, $path);
+    $provider = CredentialProvider::memoize($provider);
+
     $body = json_encode(array(
         'type' => 'MOODLE_WEBHOOK',
         'content' => json_encode($event)
     ));
 
     $client = new SqsClient([
-        'profile' => 'default',
         'region' => 'eu-west-1',
-        'version' => '2012-11-05'
+        'version' => '2012-11-05',
+        'credentials' => $provider
     ]);
+
     $params = [
         'MessageBody' => $body,
         'QueueUrl' => $callback->url
@@ -281,13 +289,13 @@ function local_webhooks_send_request($event, $callback) {
     try {
         $result = $client->sendMessage($params);
         /* Event notification */
-        local_webhooks_events::response_answer($callback->id, $result);
+        local_webhooks_events::response_answer($callback->id, [$result]);
         return [$result];
     } catch (AwsException $e) {
-        local_webhooks_events::response_answer($callback->id, $e->getMessage());
+        local_webhooks_events::response_answer($callback->id, [$e]);
         return [$e];
     } catch (Exception $e) {
-        local_webhooks_events::response_answer($callback->id, $e->getMessage());
+        local_webhooks_events::response_answer($callback->id, [$e]);
         return [$e];
     }
 
